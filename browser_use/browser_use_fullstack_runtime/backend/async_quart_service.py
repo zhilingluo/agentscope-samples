@@ -105,4 +105,5 @@ async def get_env_info():
 
 
 if __name__ == "__main__":
+    agent.chat([{'role': 'user', 'content': 'hello'}])
     app.run(host="0.0.0.0", port=9000)
