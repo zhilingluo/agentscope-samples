@@ -35,9 +35,8 @@ if os.path.exists(".env"):
 async def user_mode(input_data):
     messages = input_data.get("messages", [])
     last_name = ""
-    async for item_list in agent.chat(messages):
-        if item_list:
-            item = item_list[0]
+    async for item in agent.chat(messages):
+        if item:
             res = ""
             if isinstance(item, TextContent):
                 res = item.text
@@ -48,8 +47,9 @@ async def user_mode(input_data):
                         continue
                     res = "I will use the tool" + json.dumps(item.data["name"])
                     last_name = json.dumps(item.data["name"])
-
-            yield simple_yield(res + "\n")
+            elif isinstance(item, str):
+                res = item
+            yield simple_yield(res)
         else:
             yield simple_yield()
 
@@ -105,5 +105,4 @@ async def get_env_info():
 
 
 if __name__ == "__main__":
-    asyncio.run(agent.connect())
     app.run(host="0.0.0.0", port=9000)

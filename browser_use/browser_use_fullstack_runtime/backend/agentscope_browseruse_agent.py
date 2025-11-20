@@ -1,53 +1,28 @@
 # -*- coding: utf-8 -*-
 import os
 from typing import List, Dict, AsyncGenerator
+from venv import logger
 
 from agentscope.agent import ReActAgent
+from agentscope.formatter import DashScopeChatFormatter
 from agentscope.model import DashScopeChatModel
-from agentscope_runtime.engine import Runner
-from agentscope_runtime.engine.agents.agentscope_agent import AgentScopeAgent
+from agentscope.pipeline import stream_printing_messages
+from agentscope.tool import Toolkit, execute_python_code
+from agentscope_runtime.adapters.agentscope.memory import \
+    AgentScopeSessionHistoryMemory
+from agentscope_runtime.engine import Runner, AgentApp
 from agentscope_runtime.engine.schemas.agent_schemas import (
     AgentRequest,
     RunStatus,
 )
-from agentscope_runtime.engine.services import SandboxService
-from agentscope_runtime.engine.services.context_manager import ContextManager
-from agentscope_runtime.engine.services.environment_manager import (
-    EnvironmentManager,
-)
-from agentscope_runtime.engine.services.memory_service import (
-    InMemoryMemoryService,
-)
-from agentscope_runtime.engine.services.session_history_service import (
+from agentscope_runtime.engine.services.sandbox.sandbox_service import (
+    SandboxService)
+from agentscope_runtime.engine.services.session_history.session_history_service import (
     InMemorySessionHistoryService,
 )
-from agentscope_runtime.sandbox.tools.browser import (
-    browser_click,
-    browser_close,
-    browser_console_messages,
-    browser_drag,
-    browser_file_upload,
-    browser_handle_dialog,
-    browser_hover,
-    browser_navigate,
-    browser_navigate_back,
-    browser_navigate_forward,
-    browser_network_requests,
-    browser_pdf_save,
-    browser_press_key,
-    browser_resize,
-    browser_select_option,
-    browser_snapshot,
-    browser_tab_close,
-    browser_tab_list,
-    browser_tab_new,
-    browser_tab_select,
-    browser_take_screenshot,
-    browser_type,
-    browser_wait_for,
-    run_ipython_cell,
-    run_shell_command,
-)
+from agentscope_runtime.engine.services.agent_state.state_service import \
+    InMemoryStateService
+
 
 from prompts import SYSTEM_PROMPT
 
@@ -59,116 +34,128 @@ if os.path.exists(".env"):
 USER_ID = "user_1"
 SESSION_ID = "session_001"  # Using a fixed ID for simplicity
 
+PORT = 8090
 
-class AgentscopeBrowseruseAgent:
-    def __init__(self) -> None:
-        self.tools = [
-            run_shell_command,
-            run_ipython_cell,
-            browser_close,
-            browser_resize,
-            browser_console_messages,
-            browser_handle_dialog,
-            browser_file_upload,
-            browser_press_key,
-            browser_navigate,
-            browser_navigate_back,
-            browser_navigate_forward,
-            browser_network_requests,
-            browser_pdf_save,
-            browser_take_screenshot,
-            browser_snapshot,
-            browser_click,
-            browser_drag,
-            browser_hover,
-            browser_type,
-            browser_select_option,
-            browser_tab_list,
-            browser_tab_new,
-            browser_tab_select,
-            browser_tab_close,
-            browser_wait_for,
-        ]
-        self.agent = AgentScopeAgent(
+
+def init():
+    desktop_url = ''
+    agent_app = AgentApp(
+        app_name="Friday",
+        app_description="A helpful assistant",
+    )
+
+    @agent_app.init
+    async def init_func(self):
+        self.state_service = InMemoryStateService()
+        self.session_service = InMemorySessionHistoryService()
+        self.sandbox_service = SandboxService()
+
+        await self.state_service.start()
+        await self.session_service.start()
+        await self.sandbox_service.start()
+
+
+
+    @agent_app.shutdown
+    async def shutdown_func(self):
+        await self.state_service.stop()
+        await self.session_service.stop()
+
+    @agent_app.query(framework="agentscope")
+    async def query_func(
+            self,
+            msgs,
+            request: AgentRequest = None,
+            **kwargs,
+    ):
+        session_id = request.session_id
+        user_id = request.user_id
+
+        state = await self.state_service.export_state(
+            session_id=session_id,
+            user_id=user_id,
+        )
+
+        toolkit = Toolkit()
+        toolkit.register_tool_function(execute_python_code)
+
+        agent = ReActAgent(
             name="Friday",
             model=DashScopeChatModel(
                 "qwen-max",
                 api_key=os.getenv("DASHSCOPE_API_KEY"),
+                enable_thinking=True,
+                stream=True,
             ),
-            agent_config={
-                "sys_prompt": SYSTEM_PROMPT,
-            },
-            tools=self.tools,
-            agent_builder=ReActAgent,
+            sys_prompt=SYSTEM_PROMPT,
+            toolkit=toolkit,
+            memory=AgentScopeSessionHistoryMemory(
+                service=self.session_service,
+                session_id=session_id,
+                user_id=user_id,
+            ),
+            formatter=DashScopeChatFormatter(),
         )
 
-    async def connect(self) -> None:
-        session_history_service = InMemorySessionHistoryService()
+        if state:
+            agent.load_state_dict(state)
 
-        await session_history_service.create_session(
-            user_id=USER_ID,
-            session_id=SESSION_ID,
+        async for msg, last in stream_printing_messages(
+                agents=[agent],
+                coroutine_task=agent(msgs),
+        ):
+            yield msg, last
+
+        state = agent.state_dict()
+
+        await self.state_service.save_state(
+            user_id=user_id,
+            session_id=session_id,
+            state=state,
         )
 
-        self.mem_service = InMemoryMemoryService()
-        await self.mem_service.start()
-        self.sandbox_service = SandboxService()
-        await self.sandbox_service.start()
+    import threading
+    def run_agent_app():
+        agent_app.run(host="127.0.0.1", port=PORT)
+    threading.Thread(target=run_agent_app).start()
+    return agent_app, desktop_url
 
-        self.context_manager = ContextManager(
-            memory_service=self.mem_service,
-            session_history_service=session_history_service,
-        )
-        self.environment_manager = EnvironmentManager(
-            sandbox_service=self.sandbox_service,
-        )
-        sandboxes = self.sandbox_service.connect(
-            session_id=SESSION_ID,
-            user_id=USER_ID,
-            tools=self.tools,
-        )
+class AgentscopeBrowseruseAgent:
+    def __init__(self) -> None:
+        self.tools = [
 
-        if len(sandboxes) > 0:
-            sandbox = sandboxes[0]
-            self.desktop_url = sandbox.desktop_url
-        else:
-            self.desktop_url = ""
+        ]
 
-        runner = Runner(
-            agent=self.agent,
-            context_manager=self.context_manager,
-            environment_manager=self.environment_manager,
-        )
-        self.runner = runner
+        self.agent, desktop_url = init()
+        self.desktop_url = desktop_url
+
+
 
     async def chat(
         self,
         chat_messages: List[Dict],
     ) -> AsyncGenerator[Dict, None]:
-        convert_messages = []
-        for chat_message in chat_messages:
-            convert_messages.append(
-                {
-                    "role": chat_message["role"],
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": chat_message["content"],
-                        },
-                    ],
-                },
-            )
-        request = AgentRequest(input=convert_messages, session_id=SESSION_ID)
-        request.tools = []
-        async for message in self.runner.stream_query(
-            user_id=USER_ID,
-            request=request,
-        ):
-            if (
-                message.object == "message"
-                and RunStatus.Completed == message.status
-            ):
-                yield message.content
+
+        from openai import OpenAI
+
+        client = OpenAI(base_url=f"http://127.0.0.1:{PORT}/compatible-mode/v1")
+        logger.info(f"Sending chat messages: {chat_messages}")
+        stream = client.responses.create(
+            model="any_name",
+            input=chat_messages[-1]["content"],
+            stream=True,
+        )
+
+        for chunk in stream:
+            print(chunk)
+            print('---')
+            if hasattr(chunk,'delta'):
+                yield chunk.delta
+            else:
+                yield ''
+            #if chunk.choices[0].delta.content is not None:
+            #    yield  chunk.choices[0].delta.content
+
 
     async def close(self) -> None:
         await self.sandbox_service.stop()
