@@ -94,8 +94,9 @@ const App: React.FC = () => {
     setMessages(newMessages);
 
     setIsTyping(true);
-    await get_desktop_url();
+
     await processMessageToChatGPT(newMessages);
+    await get_desktop_url();
   };
 
   async function processMessageToChatGPT(chatMessages: ChatMessage) {

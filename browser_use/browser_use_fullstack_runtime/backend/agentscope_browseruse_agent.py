@@ -99,7 +99,6 @@ def init():
             session_id=session_id,
             user_id=user_id,
         )
-
         # Get sandbox
         sandboxes = self.sandbox_service.connect(
             session_id=session_id,
@@ -110,6 +109,7 @@ def init():
         sandbox = sandboxes[0]
         global desktop_url
         desktop_url= sandbox.desktop_url
+
         browser_tools = [
             sandbox.browser_navigate,
             sandbox.browser_take_screenshot,
