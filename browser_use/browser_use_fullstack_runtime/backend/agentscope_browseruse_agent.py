@@ -169,7 +169,7 @@ def init():
     def run_agent_app():
         agent_app.run(host="127.0.0.1", port=PORT)
 
-    threading.Thread(target=run_agent_app).start()
+    threading.Thread(target=run_agent_app, daemon=True).start()
     return agent_app
 
 
