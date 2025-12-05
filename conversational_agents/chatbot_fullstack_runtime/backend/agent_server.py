@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
 # pylint:disable=redefined-outer-name, unused-argument
 
+
+import os
+
 from agentscope.formatter import DashScopeChatFormatter
 from agentscope.tool import Toolkit, execute_python_code
 from agentscope.pipeline import stream_printing_messages
+
+from agentscope.agent import ReActAgent
+from agentscope.model import DashScopeChatModel
 
 from agentscope_runtime.engine import AgentApp
 from agentscope_runtime.engine.schemas.agent_schemas import AgentRequest
@@ -17,24 +23,15 @@ from agentscope_runtime.engine.services.session_history import (
     InMemorySessionHistoryService,
 )
 
-import asyncio
-import os
-
-from agentscope.agent import ReActAgent
-from agentscope.model import DashScopeChatModel
-
-
 
 def local_deploy():
-
     from dotenv import load_dotenv
 
     load_dotenv()
 
     server_port = int(os.environ.get("SERVER_PORT", "8090"))
-    server_endpoint = os.environ.get("SERVER_ENDPOINT", "process")
+    # server_endpoint = os.environ.get("SERVER_ENDPOINT", "process")
 
-    """Start AgentApp with streaming output enabled."""
     agent_app = AgentApp(
         app_name="Friday",
         app_description="A simple LLM agent to generate a short response",
@@ -55,10 +52,10 @@ def local_deploy():
 
     @agent_app.query(framework="agentscope")
     async def query_func(
-            self,
-            msgs,
-            request: AgentRequest = None,
-            **kwargs,
+        self,
+        msgs,
+        request: AgentRequest = None,
+        **kwargs,
     ):
         session_id = request.session_id
         user_id = request.user_id
@@ -93,8 +90,8 @@ def local_deploy():
             agent.load_state_dict(state)
 
         async for msg, last in stream_printing_messages(
-                agents=[agent],
-                coroutine_task=agent(msgs),
+            agents=[agent],
+            coroutine_task=agent(msgs),
         ):
             yield msg, last
 

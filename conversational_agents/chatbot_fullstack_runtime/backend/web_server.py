@@ -152,13 +152,15 @@ def sse_client(url, data=None):
                     pass
 
 
-def call_runner(query, query_user_id, query_session_id):
+def call_runner(query):
     server_port = int(os.environ.get("SERVER_PORT", "8090"))
     server_host = os.environ.get("SERVER_HOST", "localhost")
 
     from openai import OpenAI
 
-    client = OpenAI(base_url=f"http://{server_host}:{server_port}/compatible-mode/v1")
+    client = OpenAI(
+        base_url=f"http://{server_host}:{server_port}/compatible-mode/v1",
+    )
 
     stream = client.responses.create(
         model="any_name",
@@ -167,11 +169,10 @@ def call_runner(query, query_user_id, query_session_id):
     )
 
     for chunk in stream:
-        if hasattr(chunk, 'delta'):
+        if hasattr(chunk, "delta"):
             yield chunk.delta
         else:
-            yield ''
-
+            yield ""
 
 
 # API routes
@@ -356,11 +357,9 @@ def send_message(conversation_id):
         ai_response_text = ""
 
         question = text
-        conversation_id_str = str(conversation_id)
+
         for item in call_runner(
             question,
-            conversation_id_str,
-            conversation_id_str,
         ):
             ai_response_text += item
 

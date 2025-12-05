@@ -105,7 +105,8 @@ const App: React.FC = () => {
         if (messageObject.message.trim() === "") {
           return null;
         }
-        const role = messageObject.sender === "assistant" ? "assistant" : "user";
+        const role =
+          messageObject.sender === "assistant" ? "assistant" : "user";
         return { role, content: messageObject.message };
       })
       .filter(Boolean);

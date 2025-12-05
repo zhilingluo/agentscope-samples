@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
-import asyncio
 import json
 import logging
 import os
 import time
+
+from quart import Quart, Response, jsonify, request
+from quart_cors import cors
 
 from agentscope_browseruse_agent import AgentscopeBrowseruseAgent
 from agentscope_runtime.engine.schemas.agent_schemas import (
     DataContent,
     TextContent,
 )
-from quart import Quart, Response, jsonify, request
-from quart_cors import cors
+
 
 app = Quart(__name__)
 app = cors(app, allow_origin="*")
@@ -105,5 +106,5 @@ async def get_env_info():
 
 
 if __name__ == "__main__":
-    agent.chat([{'role': 'user', 'content': 'hello'}])
+    agent.chat([{"role": "user", "content": "hello"}])
     app.run(host="0.0.0.0", port=9000)

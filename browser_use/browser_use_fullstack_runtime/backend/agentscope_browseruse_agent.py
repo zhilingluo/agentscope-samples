@@ -9,24 +9,29 @@ from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import TextBlock
 from agentscope.model import DashScopeChatModel
 from agentscope.pipeline import stream_printing_messages
-from agentscope.tool import Toolkit, execute_python_code, ToolResponse
-from agentscope_runtime.adapters.agentscope.memory import \
-    AgentScopeSessionHistoryMemory
-from agentscope_runtime.engine import Runner, AgentApp
-from agentscope_runtime.engine.schemas.agent_schemas import (
-    AgentRequest,
-    RunStatus,
-)
-from agentscope_runtime.engine.services.sandbox.sandbox_service import (
-    SandboxService)
-from agentscope_runtime.engine.services.session_history.session_history_service import (
-    InMemorySessionHistoryService,
-)
-from agentscope_runtime.engine.services.agent_state.state_service import \
-    InMemoryStateService
-
+from agentscope.tool import Toolkit, ToolResponse
 
 from prompts import SYSTEM_PROMPT
+
+from agentscope_runtime.adapters.agentscope.memory import (
+    AgentScopeSessionHistoryMemory,
+)
+from agentscope_runtime.engine import AgentApp
+from agentscope_runtime.engine.schemas.agent_schemas import (
+    AgentRequest,
+)
+from agentscope_runtime.engine.services.agent_state.state_service import (
+    InMemoryStateService,
+)
+from agentscope_runtime.engine.services.sandbox.sandbox_service import (
+    SandboxService,
+)
+
+# flake8: noqa: E501
+from agentscope_runtime.engine.services.session_history.session_history_service import (  # pylint: disable=line-too-long
+    InMemorySessionHistoryService,  # pylint: disable=line-too-long
+)
+
 
 if os.path.exists(".env"):
     from dotenv import load_dotenv
@@ -37,6 +42,7 @@ USER_ID = "user_1"
 SESSION_ID = "session_001"  # Using a fixed ID for simplicity
 
 PORT = 8090
+
 
 def sandbox_tool_adapter(func):
     """
@@ -60,9 +66,12 @@ def sandbox_tool_adapter(func):
         return ToolResponse(content=[TextBlock(type="text", text=str(res))])
 
     return wrapper
-desktop_url = ''
-def init():
 
+
+desktop_url = ""
+
+
+def init():
     agent_app = AgentApp(
         app_name="Friday",
         app_description="A helpful assistant",
@@ -78,19 +87,17 @@ def init():
         await self.session_service.start()
         await self.sandbox_service.start()
 
-
-
     @agent_app.shutdown
     async def shutdown_func(self):
         await self.state_service.stop()
         await self.session_service.stop()
         await self.sandbox_service.stop()
+
     @agent_app.query(framework="agentscope")
     async def query_func(
-            self,
-            msgs,
-            request: AgentRequest = None,
-            **kwargs,
+        self,
+        msgs,
+        request: AgentRequest = None,
     ):
         session_id = request.session_id
         user_id = request.user_id
@@ -108,7 +115,7 @@ def init():
 
         sandbox = sandboxes[0]
         global desktop_url
-        desktop_url= sandbox.desktop_url
+        desktop_url = sandbox.desktop_url
 
         browser_tools = [
             sandbox.browser_navigate,
@@ -144,8 +151,8 @@ def init():
             agent.load_state_dict(state)
 
         async for msg, last in stream_printing_messages(
-                agents=[agent],
-                coroutine_task=agent(msgs),
+            agents=[agent],
+            coroutine_task=agent(msgs),
         ):
             yield msg, last
 
@@ -158,24 +165,23 @@ def init():
         )
 
     import threading
+
     def run_agent_app():
         agent_app.run(host="127.0.0.1", port=PORT)
+
     threading.Thread(target=run_agent_app).start()
     return agent_app
 
+
 class AgentscopeBrowseruseAgent:
     def __init__(self) -> None:
-
         self.agent = init()
-        self.desktop_url = ''
-
-
+        self.desktop_url = ""
 
     async def chat(
         self,
         chat_messages: List[Dict],
     ) -> AsyncGenerator[Dict, None]:
-
         from openai import OpenAI
 
         client = OpenAI(base_url=f"http://127.0.0.1:{PORT}/compatible-mode/v1")
@@ -186,17 +192,16 @@ class AgentscopeBrowseruseAgent:
             stream=True,
         )
         global desktop_url
-        if desktop_url != '':
+        if desktop_url != "":
             logger.info(f"Current desktop URL: {desktop_url}")
         self.desktop_url = desktop_url
         for chunk in stream:
-            if hasattr(chunk,'delta'):
+            if hasattr(chunk, "delta"):
                 yield chunk.delta
             else:
-                yield ''
-            #if chunk.choices[0].delta.content is not None:
+                yield {}
+            # if chunk.choices[0].delta.content is not None:
             #    yield  chunk.choices[0].delta.content
-
 
     async def close(self) -> None:
         await self.sandbox_service.stop()
